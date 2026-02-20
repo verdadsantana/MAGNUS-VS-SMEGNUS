@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Magnus VS Smegnus</title>
+
+<style>
+body{
+ margin:0;
+ background:#000;
+ color:white;
+ font-family:monospace;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ height:100vh;
+}
+
+/* landscape lock */
+@media (orientation:portrait){
+ body::before{
+   content:"Ruota il telefono in orizzontale";
+   position:fixed;
+   inset:0;
+   background:black;
+   color:white;
+   display:flex;
+   align-items:center;
+   justify-content:center;
+   font-size:24px;
+   z-index:999;
+ }
+}
+
+canvas{
+ image-rendering:pixelated;
+ background:linear-gradient(#12002a,#000);
+}
+button{
+ padding:15px;
+ font-size:20px;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+<button onclick="createRoom()">CREA PARTITA</button>
+<p id="code"></p>
+</div>
+
+<canvas id="game" width="900" height="400" style="display:none"></canvas>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+
+let peer,conn,isHost=false;
+
+function createRoom(){
+ if(location.protocol!=="https:" && location.hostname!=="localhost"){
+  alert("Apri tramite link HTTPS");
+  return;
+ }
+
+ isHost=true;
+ const code=Math.random().toString(36).substring(2,8).toUpperCase();
+
+ document.getElementById("code").textContent="Codice: "+code;
+
+ peer=new Peer(code);
+
+ peer.on("connection",c=>{
+  conn=c;
+  startGame();
+ });
+
+ peer.on("error",e=>alert(e.type));
+}
+
+function startGame(){
+ document.getElementById("menu").style.display="none";
+ document.getElementById("game").style.display="block";
+ loop();
+}
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let p1={x:100,y:300};
+let p2={x:700,y:300};
+
+function drawPlayer(p,color){
+ ctx.fillStyle=color;
+ ctx.fillRect(p.x,p.y,40,80);
+}
+
+function loop(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ drawPlayer(p1,"red");
+ drawPlayer(p2,"cyan");
+
+ requestAnimationFrame(loop);
+}
+
+</script>
+</body>
+</html>
