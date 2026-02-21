@@ -1,151 +1,212 @@
 <!DOCTYPE html>
-<html lang="it">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Magnus VS Smegnus</title>
-
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <style>
-body{
- margin:0;
- background:#000;
- color:white;
- font-family:monospace;
- display:flex;
- align-items:center;
- justify-content:center;
- height:100vh;
- text-align:center;
-}
-
-/* landscape lock */
-@media (orientation:portrait){
- body::before{
-  content:"Ruota il telefono in orizzontale";
-  position:fixed;
-  inset:0;
-  background:black;
-  color:white;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:24px;
-  z-index:999;
- }
-}
-
-canvas{
- image-rendering:pixelated;
- background:linear-gradient(#12002a,#000);
-}
+body{margin:0;background:black;color:white;font-family:monospace;overflow:hidden}
+canvas{background:linear-gradient(#12002a,#000);image-rendering:pixelated}
 
 button{
- padding:15px;
- font-size:20px;
- margin:5px;
+ position:absolute;
+ border:none;
+ border-radius:50%;
+ width:70px;
+ height:70px;
+ font-size:25px;
+ background:#ffffff22;
+ color:white;
 }
 
-input{
- padding:12px;
- font-size:18px;
- text-align:center;
- width:200px;
+#punch{right:20px;bottom:140px}
+#block{right:90px;bottom:60px}
+#shoot{right:20px;bottom:60px}
+
+#stick{
+ position:absolute;
+ left:30px;
+ bottom:60px;
+ width:120px;
+ height:120px;
+ border-radius:50%;
+ background:#ffffff22;
 }
+
+#knob{
+ position:absolute;
+ left:40px;
+ bottom:70px;
+ width:80px;
+ height:80px;
+ border-radius:50%;
+ background:#fff3;
+}
+
 </style>
 </head>
 <body>
 
-<div id="menu">
+<canvas id="game" width="900" height="420"></canvas>
 
-<button onclick="createRoom()">CREA PARTITA</button>
-<br><br>
+<div id="stick"></div>
+<div id="knob"></div>
 
-<input id="joinCode" placeholder="CODICE">
-<br>
-
-<button onclick="joinRoom()">UNISCITI</button>
-
-<p id="code"></p>
-
-</div>
-
-<canvas id="game" width="900" height="400" style="display:none"></canvas>
-
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<button id="punch">👊</button>
+<button id="block">🛡</button>
+<button id="shoot">⚡</button>
 
 <script>
-let peer,conn,isHost=false;
-
-function createRoom(){
-
- if(location.protocol!=="https:" && location.hostname!=="localhost"){
-  alert("Apri tramite link HTTPS");
-  return;
- }
-
- isHost=true;
-
- const code=Math.random().toString(36).substring(2,8).toUpperCase();
- document.getElementById("code").textContent="Codice: "+code;
-
- peer=new Peer(code);
-
- peer.on("connection",c=>{
-  conn=c;
-  startGame();
- });
-
- peer.on("error",e=>alert("Errore: "+e.type));
-}
-
-function joinRoom(){
-
- const code=document.getElementById("joinCode").value.trim().toUpperCase();
-
- if(!code){
-  alert("Inserisci codice");
-  return;
- }
-
- peer=new Peer();
-
- peer.on("open",()=>{
-  conn=peer.connect(code);
-
-  conn.on("open",()=>{
-   startGame();
-  });
-
-  conn.on("error",()=>alert("Codice non valido"));
- });
-}
-
-function startGame(){
- document.getElementById("menu").style.display="none";
- document.getElementById("game").style.display="block";
- loop();
-}
-
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
 
-let p1={x:100,y:300};
-let p2={x:700,y:300};
+const magnusImg=new Image(); magnusImg.src="magnus.png";
+const smegnusImg=new Image(); smegnusImg.src="smegnus.png";
 
-function drawPlayer(p,color){
- ctx.fillStyle=color;
- ctx.fillRect(p.x,p.y,40,80);
+let p1={x:150,y:240,hp:100,displayHp:100,face:1};
+let p2={x:650,y:240,hp:100,displayHp:100,face:-1};
+
+let bullets=[];
+let input={left:false,right:false,jump:false,punch:false,block:false,shoot:false};
+
+
+// joystick
+const stick=document.getElementById("stick");
+const knob=document.getElementById("knob");
+
+let dragging=false;
+
+stick.addEventListener("touchstart",()=>dragging=true);
+
+window.addEventListener("touchend",()=>{
+ dragging=false;
+ knob.style.left="40px";
+ knob.style.bottom="70px";
+ input.left=input.right=input.jump=false;
+});
+
+window.addEventListener("touchmove",e=>{
+ if(!dragging)return;
+
+ let t=e.touches[0];
+ let rect=stick.getBoundingClientRect();
+
+ let x=t.clientX-rect.left-60;
+ let y=t.clientY-rect.top-60;
+
+ knob.style.left=(x+40)+"px";
+ knob.style.bottom=(-y+70)+"px";
+
+ input.left=x<-20;
+ input.right=x>20;
+ input.jump=y<-20;
+});
+
+// buttons
+punch.ontouchstart=()=>input.punch=true;
+punch.ontouchend=()=>input.punch=false;
+
+block.ontouchstart=()=>input.block=true;
+block.ontouchend=()=>input.block=false;
+
+shoot.ontouchstart=()=>input.shoot=true;
+shoot.ontouchend=()=>input.shoot=false;
+
+
+// mechanics
+function punch(a,b){
+ if(Math.abs(a.x-b.x)<120 && !b.block){
+  b.hp-=8;
+  b.x+=a.face*20;
+ }
+}
+
+function shootBall(p){
+ bullets.push({x:p.x+70,y:p.y+70,vx:p.face*9,owner:p});
+}
+
+function update(){
+
+ if(input.left){p1.x-=4;p1.face=-1}
+ if(input.right){p1.x+=4;p1.face=1}
+ if(input.jump && p1.y>=240)p1.vy=-12;
+
+ p1.block=input.block;
+
+ if(input.punch && !p1.cool){punch(p1,p2);p1.cool=20;}
+ if(input.shoot && !p1.cool){shootBall(p1);p1.cool=30;}
+ if(p1.cool)p1.cool--;
+
+ // gravity
+ p1.vy=(p1.vy||0)+0.6;
+ p1.y+=p1.vy;
+ if(p1.y>240){p1.y=240;p1.vy=0;}
+
+ // simple AI enemy
+ if(Math.random()<0.02)punch(p2,p1);
+
+ // bullets
+ for(let b of bullets){
+  b.x+=b.vx;
+  if(Math.abs(b.x-p2.x)<80 && !p2.block){
+   p2.hp-=10;
+   b.dead=true;
+  }
+ }
+ bullets=bullets.filter(b=>!b.dead);
+
+ // smooth bars
+ p1.displayHp+=(p1.hp-p1.displayHp)*0.1;
+ p2.displayHp+=(p2.hp-p2.displayHp)*0.1;
+}
+
+function bar(x,y,h){
+ ctx.fillStyle="#400";
+ ctx.fillRect(x,y,300,20);
+ ctx.fillStyle="#f00";
+ ctx.fillRect(x,y,300*(h/100),20);
+ ctx.strokeStyle="white";
+ ctx.strokeRect(x,y,300,20);
+}
+
+function drawPlayer(p,img){
+ ctx.save();
+ if(p.face==-1){
+  ctx.scale(-1,1);
+  ctx.drawImage(img,-p.x-150,p.y,150,180);
+ } else ctx.drawImage(img,p.x,p.y,150,180);
+ ctx.restore();
+
+ if(p.block){
+  ctx.strokeStyle="cyan";
+  ctx.strokeRect(p.x+40,p.y+40,60,80);
+ }
+}
+
+function draw(){
+ ctx.clearRect(0,0,900,420);
+
+ bar(30,30,p1.displayHp);
+ bar(570,30,p2.displayHp);
+
+ ctx.fillStyle="#2a0044";
+ ctx.fillRect(0,380,900,40);
+
+ drawPlayer(p1,magnusImg);
+ drawPlayer(p2,smegnusImg);
+
+ for(let b of bullets){
+  ctx.fillStyle="orange";
+  ctx.beginPath();
+  ctx.arc(b.x,b.y,12,0,6.28);
+  ctx.fill();
+ }
 }
 
 function loop(){
- ctx.clearRect(0,0,canvas.width,canvas.height);
-
- drawPlayer(p1,"red");
- drawPlayer(p2,"cyan");
-
+ update();
+ draw();
  requestAnimationFrame(loop);
 }
+loop();
 </script>
-
 </body>
 </html>
