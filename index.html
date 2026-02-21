@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>index.html</title>
+<title>Magnus VS Smegnus</title>
 
 <style>
 body{
@@ -15,21 +15,22 @@ body{
  align-items:center;
  justify-content:center;
  height:100vh;
+ text-align:center;
 }
 
 /* landscape lock */
 @media (orientation:portrait){
  body::before{
-   content:"Ruota il telefono in orizzontale";
-   position:fixed;
-   inset:0;
-   background:black;
-   color:white;
-   display:flex;
-   align-items:center;
-   justify-content:center;
-   font-size:24px;
-   z-index:999;
+  content:"Ruota il telefono in orizzontale";
+  position:fixed;
+  inset:0;
+  background:black;
+  color:white;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:24px;
+  z-index:999;
  }
 }
 
@@ -37,35 +38,54 @@ canvas{
  image-rendering:pixelated;
  background:linear-gradient(#12002a,#000);
 }
+
 button{
  padding:15px;
  font-size:20px;
+ margin:5px;
+}
+
+input{
+ padding:12px;
+ font-size:18px;
+ text-align:center;
+ width:200px;
 }
 </style>
 </head>
 <body>
 
 <div id="menu">
+
 <button onclick="createRoom()">CREA PARTITA</button>
+<br><br>
+
+<input id="joinCode" placeholder="CODICE">
+<br>
+
+<button onclick="joinRoom()">UNISCITI</button>
+
 <p id="code"></p>
+
 </div>
 
 <canvas id="game" width="900" height="400" style="display:none"></canvas>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script>
 
+<script>
 let peer,conn,isHost=false;
 
 function createRoom(){
+
  if(location.protocol!=="https:" && location.hostname!=="localhost"){
   alert("Apri tramite link HTTPS");
   return;
  }
 
  isHost=true;
- const code=Math.random().toString(36).substring(2,8).toUpperCase();
 
+ const code=Math.random().toString(36).substring(2,8).toUpperCase();
  document.getElementById("code").textContent="Codice: "+code;
 
  peer=new Peer(code);
@@ -75,7 +95,29 @@ function createRoom(){
   startGame();
  });
 
- peer.on("error",e=>alert(e.type));
+ peer.on("error",e=>alert("Errore: "+e.type));
+}
+
+function joinRoom(){
+
+ const code=document.getElementById("joinCode").value.trim().toUpperCase();
+
+ if(!code){
+  alert("Inserisci codice");
+  return;
+ }
+
+ peer=new Peer();
+
+ peer.on("open",()=>{
+  conn=peer.connect(code);
+
+  conn.on("open",()=>{
+   startGame();
+  });
+
+  conn.on("error",()=>alert("Codice non valido"));
+ });
 }
 
 function startGame(){
@@ -103,7 +145,7 @@ function loop(){
 
  requestAnimationFrame(loop);
 }
-
 </script>
+
 </body>
 </html>
