@@ -2,23 +2,34 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<style>
-body{margin:0;background:black;color:white;font-family:monospace;text-align:center}
-canvas{background:linear-gradient(#12002a,#000);image-rendering:pixelated}
+<title>MAGNUS VS SMEGNUS</title>
 
-button,input{
- padding:15px;
- font-size:18px;
- margin:10px;
- border:none;
- border-radius:10px;
+<style>
+body{
+ margin:0;
+ background:#000;
+ color:#fff;
+ font-family:Arial;
+ overflow:hidden;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ height:100vh;
+}
+
+#menu{text-align:center}
+button,input{padding:14px;font-size:18px;margin:10px;border:none;border-radius:10px}
+
+canvas{
+ background:linear-gradient(#12002a,#000);
+ image-rendering:pixelated;
 }
 
 /* joystick */
 #stick{
  position:absolute;
- left:40px;
- bottom:80px;
+ left:30px;
+ bottom:60px;
  width:140px;
  height:140px;
  border-radius:50%;
@@ -27,20 +38,17 @@ button,input{
 
 #knob{
  position:absolute;
- left:40px;
- bottom:80px;
+ left:30px;
+ bottom:60px;
  width:140px;
  height:140px;
- pointer-events:none;
  display:flex;
  align-items:center;
  justify-content:center;
+ pointer-events:none;
 }
-
 #knob div{
- width:60px;
- height:60px;
- border-radius:50%;
+ width:60px;height:60px;border-radius:50%;
  background:#fff4;
 }
 
@@ -51,11 +59,13 @@ button,input{
  border-radius:50%;
  background:#ffffff22;
  color:white;
- font-size:25px;
- border:none;
+ font-size:24px;
+ display:flex;
+ align-items:center;
+ justify-content:center;
 }
 
-#punch{right:30px;bottom:170px}
+#punch{right:30px;bottom:160px}
 #block{right:110px;bottom:80px}
 #shoot{right:30px;bottom:80px}
 
@@ -74,22 +84,34 @@ button,input{
 <canvas id="game" width="900" height="420" style="display:none"></canvas>
 
 <div id="stick"></div>
-<div id="knob"><div></div></div>
+<div id="knob"><div id="knobInner"></div></div>
 
-<button id="punch" class="ctrl">👊</button>
-<button id="block" class="ctrl">🛡</button>
-<button id="shoot" class="ctrl">⚡</button>
+<div id="punch" class="ctrl">👊</div>
+<div id="block" class="ctrl">🛡</div>
+<div id="shoot" class="ctrl">⚡</div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 
-// ---------------- MULTIPLAYER ----------------
+// ---------------- ASSETS ----------------
+const magnusImg=new Image();
+const smegnusImg=new Image();
 
+magnusImg.src="magnus.png";
+smegnusImg.src="smegnus.png";
+
+magnusImg.onerror=()=>alert("magnus.png mancante");
+smegnusImg.onerror=()=>alert("smegnus.png mancante");
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+// ---------------- MULTIPLAYER ----------------
 let peer,conn;
 
 function createRoom(){
  const code=Math.random().toString(36).substring(2,8).toUpperCase();
- document.getElementById("roomCode").textContent="Codice: "+code;
+ document.getElementById("roomCode").textContent=code;
 
  peer=new Peer(code);
 
@@ -112,81 +134,75 @@ function joinRoom(){
 }
 
 // ---------------- GAME ----------------
-
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
-
-const magnusImg=new Image();
-magnusImg.src="magnus.png";
-
-const smegnusImg=new Image();
-smegnusImg.src="smegnus.png";
-
+const FLOOR=240;
 let me,enemy,bullets=[];
 let input={};
 
-function startGame(host){
+function makePlayer(x,f){
+ return {x,y:FLOOR,vy:0,hp:100,face:f,block:false};
+}
 
+function startGame(host){
  document.getElementById("menu").style.display="none";
  canvas.style.display="block";
 
- if(host){
-  me={x:150,y:240,hp:100,face:1};
-  enemy={x:650,y:240,hp:100,face:-1};
- }else{
-  me={x:650,y:240,hp:100,face:-1};
-  enemy={x:150,y:240,hp:100,face:1};
- }
+ me=makePlayer(host?150:650,host?1:-1);
+ enemy=makePlayer(host?650:150,host?-1:1);
 
  loop();
 }
 
 // ---------------- JOYSTICK ----------------
-
 const stick=document.getElementById("stick");
-const knob=document.getElementById("knob").firstChild;
+const knob=document.getElementById("knobInner");
 
 let dragging=false;
+let origin=null;
 
-stick.addEventListener("touchstart",()=>dragging=true);
+stick.addEventListener("touchstart",e=>{
+ dragging=true;
+ const r=stick.getBoundingClientRect();
+ origin={x:r.left+r.width/2,y:r.top+r.height/2};
+ e.preventDefault();
+},{passive:false});
 
 window.addEventListener("touchend",()=>{
  dragging=false;
- knob.style.transform="translate(0px,0px)";
- input.left=false;
- input.right=false;
+ knob.style.transform="translate(0,0)";
+ input.left=input.right=false;
 });
 
 window.addEventListener("touchmove",e=>{
  if(!dragging)return;
 
- const rect=stick.getBoundingClientRect();
- const t=e.touches[0];
+ const t=[...e.touches].find(t=>t.target===stick)||e.touches[0];
 
- let x=t.clientX-(rect.left+rect.width/2);
+ let dx=t.clientX-origin.x;
+ let dy=t.clientY-origin.y;
 
- const max=40;
- x=Math.max(-max,Math.min(max,x));
+ const max=45;
+ const dist=Math.min(Math.hypot(dx,dy),max);
+ const ang=Math.atan2(dy,dx);
 
- knob.style.transform=`translate(${x}px,0px)`;
+ dx=Math.cos(ang)*dist;
+ dy=Math.sin(ang)*dist;
 
- input.left=x<-10;
- input.right=x>10;
-});
+ knob.style.transform=`translate(${dx}px,${dy}px)`;
+
+ input.left=dx<-10;
+ input.right=dx>10;
+
+ e.preventDefault();
+},{passive:false});
 
 // ---------------- BUTTONS ----------------
+["punch","block","shoot"].forEach(id=>{
+ const el=document.getElementById(id);
+ el.ontouchstart=e=>{input[id]=true;e.preventDefault();}
+ el.ontouchend=e=>{input[id]=false;e.preventDefault();}
+});
 
-punch.ontouchstart=()=>input.punch=true;
-punch.ontouchend=()=>input.punch=false;
-
-block.ontouchstart=()=>input.block=true;
-block.ontouchend=()=>input.block=false;
-
-shoot.ontouchstart=()=>input.shoot=true;
-shoot.ontouchend=()=>input.shoot=false;
-
-// ---------------- MECHANICS ----------------
-
+// ---------------- LOGIC ----------------
 function update(){
 
  if(input.left){me.x-=4;me.face=-1}
@@ -194,16 +210,18 @@ function update(){
 
  me.block=input.block;
 
- if(input.punch && !me.cool){
-  if(Math.abs(me.x-enemy.x)<120 && !enemy.block){
-   enemy.hp-=8;
-   enemy.x+=me.face*20;
+ // punch
+ if(input.punch&&!me.cool){
+  if(Math.abs(me.x-enemy.x)<130&&!enemy.block){
+   enemy.hp-=10;
+   enemy.x+=me.face*25;
   }
   me.cool=20;
  }
 
- if(input.shoot && !me.cool){
-  bullets.push({x:me.x+70,y:me.y+70,vx:me.face*8});
+ // shoot
+ if(input.shoot&&!me.cool){
+  bullets.push({x:me.x+70,y:me.y+70,vx:me.face*9});
   me.cool=30;
  }
 
@@ -211,15 +229,15 @@ function update(){
 
  for(let b of bullets){
   b.x+=b.vx;
-  if(Math.abs(b.x-enemy.x)<80 && !enemy.block){
-   enemy.hp-=10;
+  if(Math.abs(b.x-enemy.x)<80&&!enemy.block){
+   enemy.hp-=12;
    b.dead=true;
   }
  }
-
  bullets=bullets.filter(b=>!b.dead);
 
- if(conn){
+ // sync
+ if(conn && conn.open){
   conn.send({me,bullets});
   conn.on("data",d=>{
    enemy=d.me;
@@ -228,36 +246,23 @@ function update(){
 }
 
 // ---------------- DRAW ----------------
-
-function bar(x,y,h){
- ctx.fillStyle="#400";ctx.fillRect(x,y,300,20);
- ctx.fillStyle="#f00";ctx.fillRect(x,y,300*(h/100),20);
- ctx.strokeStyle="white";ctx.strokeRect(x,y,300,20);
-}
-
 function drawPlayer(p,img){
  ctx.save();
- if(p.face===-1){
+
+ if(p.face==-1){
   ctx.translate(p.x+150,0);
   ctx.scale(-1,1);
   ctx.drawImage(img,0,p.y,150,180);
  }else{
   ctx.drawImage(img,p.x,p.y,150,180);
  }
- ctx.restore();
 
- if(p.block){
-  ctx.strokeStyle="cyan";
-  ctx.strokeRect(p.x+40,p.y+40,60,80);
- }
+ ctx.restore();
 }
 
 function draw(){
 
  ctx.clearRect(0,0,900,420);
-
- bar(30,30,me.hp);
- bar(570,30,enemy.hp);
 
  ctx.fillStyle="#2a0044";
  ctx.fillRect(0,380,900,40);
@@ -271,16 +276,312 @@ function draw(){
   ctx.arc(b.x,b.y,12,0,6.28);
   ctx.fill();
  }
+
+ // hp bars
+ ctx.fillStyle="red";
+ ctx.fillRect(30,30,me.hp*3,20);
+ ctx.fillRect(870-enemy.hp*3,30,enemy.hp*3,20);
 }
 
 // ---------------- LOOP ----------------
-
 function loop(){
  update();
  draw();
  requestAnimationFrame(loop);
 }
+</script>
+</body>
+</html><!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>MAGNUS VS SMEGNUS</title>
 
+<style>
+body{
+ margin:0;
+ background:#000;
+ color:#fff;
+ font-family:Arial;
+ overflow:hidden;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ height:100vh;
+}
+
+#menu{text-align:center}
+button,input{padding:14px;font-size:18px;margin:10px;border:none;border-radius:10px}
+
+canvas{
+ background:linear-gradient(#12002a,#000);
+ image-rendering:pixelated;
+}
+
+/* joystick */
+#stick{
+ position:absolute;
+ left:30px;
+ bottom:60px;
+ width:140px;
+ height:140px;
+ border-radius:50%;
+ background:#ffffff22;
+}
+
+#knob{
+ position:absolute;
+ left:30px;
+ bottom:60px;
+ width:140px;
+ height:140px;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ pointer-events:none;
+}
+#knob div{
+ width:60px;height:60px;border-radius:50%;
+ background:#fff4;
+}
+
+/* buttons */
+.ctrl{
+ position:absolute;
+ width:70px;height:70px;
+ border-radius:50%;
+ background:#ffffff22;
+ color:white;
+ font-size:24px;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+}
+
+#punch{right:30px;bottom:160px}
+#block{right:110px;bottom:80px}
+#shoot{right:30px;bottom:80px}
+
+</style>
+</head>
+<body>
+
+<div id="menu">
+<h1>MAGNUS VS SMEGNUS</h1>
+<button onclick="createRoom()">CREA PARTITA</button><br>
+<input id="codeInput" placeholder="CODICE"><br>
+<button onclick="joinRoom()">ENTRA</button>
+<p id="roomCode"></p>
+</div>
+
+<canvas id="game" width="900" height="420" style="display:none"></canvas>
+
+<div id="stick"></div>
+<div id="knob"><div id="knobInner"></div></div>
+
+<div id="punch" class="ctrl">👊</div>
+<div id="block" class="ctrl">🛡</div>
+<div id="shoot" class="ctrl">⚡</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+
+// ---------------- ASSETS ----------------
+const magnusImg=new Image();
+const smegnusImg=new Image();
+
+magnusImg.src="magnus.png";
+smegnusImg.src="smegnus.png";
+
+magnusImg.onerror=()=>alert("magnus.png mancante");
+smegnusImg.onerror=()=>alert("smegnus.png mancante");
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+// ---------------- MULTIPLAYER ----------------
+let peer,conn;
+
+function createRoom(){
+ const code=Math.random().toString(36).substring(2,8).toUpperCase();
+ document.getElementById("roomCode").textContent=code;
+
+ peer=new Peer(code);
+
+ peer.on("connection",c=>{
+  conn=c;
+  startGame(true);
+ });
+}
+
+function joinRoom(){
+ const code=document.getElementById("codeInput").value.trim().toUpperCase();
+ if(!code)return alert("Inserisci codice");
+
+ peer=new Peer();
+
+ peer.on("open",()=>{
+  conn=peer.connect(code);
+  conn.on("open",()=>startGame(false));
+ });
+}
+
+// ---------------- GAME ----------------
+const FLOOR=240;
+let me,enemy,bullets=[];
+let input={};
+
+function makePlayer(x,f){
+ return {x,y:FLOOR,vy:0,hp:100,face:f,block:false};
+}
+
+function startGame(host){
+ document.getElementById("menu").style.display="none";
+ canvas.style.display="block";
+
+ me=makePlayer(host?150:650,host?1:-1);
+ enemy=makePlayer(host?650:150,host?-1:1);
+
+ loop();
+}
+
+// ---------------- JOYSTICK ----------------
+const stick=document.getElementById("stick");
+const knob=document.getElementById("knobInner");
+
+let dragging=false;
+let origin=null;
+
+stick.addEventListener("touchstart",e=>{
+ dragging=true;
+ const r=stick.getBoundingClientRect();
+ origin={x:r.left+r.width/2,y:r.top+r.height/2};
+ e.preventDefault();
+},{passive:false});
+
+window.addEventListener("touchend",()=>{
+ dragging=false;
+ knob.style.transform="translate(0,0)";
+ input.left=input.right=false;
+});
+
+window.addEventListener("touchmove",e=>{
+ if(!dragging)return;
+
+ const t=[...e.touches].find(t=>t.target===stick)||e.touches[0];
+
+ let dx=t.clientX-origin.x;
+ let dy=t.clientY-origin.y;
+
+ const max=45;
+ const dist=Math.min(Math.hypot(dx,dy),max);
+ const ang=Math.atan2(dy,dx);
+
+ dx=Math.cos(ang)*dist;
+ dy=Math.sin(ang)*dist;
+
+ knob.style.transform=`translate(${dx}px,${dy}px)`;
+
+ input.left=dx<-10;
+ input.right=dx>10;
+
+ e.preventDefault();
+},{passive:false});
+
+// ---------------- BUTTONS ----------------
+["punch","block","shoot"].forEach(id=>{
+ const el=document.getElementById(id);
+ el.ontouchstart=e=>{input[id]=true;e.preventDefault();}
+ el.ontouchend=e=>{input[id]=false;e.preventDefault();}
+});
+
+// ---------------- LOGIC ----------------
+function update(){
+
+ if(input.left){me.x-=4;me.face=-1}
+ if(input.right){me.x+=4;me.face=1}
+
+ me.block=input.block;
+
+ // punch
+ if(input.punch&&!me.cool){
+  if(Math.abs(me.x-enemy.x)<130&&!enemy.block){
+   enemy.hp-=10;
+   enemy.x+=me.face*25;
+  }
+  me.cool=20;
+ }
+
+ // shoot
+ if(input.shoot&&!me.cool){
+  bullets.push({x:me.x+70,y:me.y+70,vx:me.face*9});
+  me.cool=30;
+ }
+
+ if(me.cool)me.cool--;
+
+ for(let b of bullets){
+  b.x+=b.vx;
+  if(Math.abs(b.x-enemy.x)<80&&!enemy.block){
+   enemy.hp-=12;
+   b.dead=true;
+  }
+ }
+ bullets=bullets.filter(b=>!b.dead);
+
+ // sync
+ if(conn && conn.open){
+  conn.send({me,bullets});
+  conn.on("data",d=>{
+   enemy=d.me;
+  });
+ }
+}
+
+// ---------------- DRAW ----------------
+function drawPlayer(p,img){
+ ctx.save();
+
+ if(p.face==-1){
+  ctx.translate(p.x+150,0);
+  ctx.scale(-1,1);
+  ctx.drawImage(img,0,p.y,150,180);
+ }else{
+  ctx.drawImage(img,p.x,p.y,150,180);
+ }
+
+ ctx.restore();
+}
+
+function draw(){
+
+ ctx.clearRect(0,0,900,420);
+
+ ctx.fillStyle="#2a0044";
+ ctx.fillRect(0,380,900,40);
+
+ drawPlayer(me,magnusImg);
+ drawPlayer(enemy,smegnusImg);
+
+ for(let b of bullets){
+  ctx.fillStyle="orange";
+  ctx.beginPath();
+  ctx.arc(b.x,b.y,12,0,6.28);
+  ctx.fill();
+ }
+
+ // hp bars
+ ctx.fillStyle="red";
+ ctx.fillRect(30,30,me.hp*3,20);
+ ctx.fillRect(870-enemy.hp*3,30,enemy.hp*3,20);
+}
+
+// ---------------- LOOP ----------------
+function loop(){
+ update();
+ draw();
+ requestAnimationFrame(loop);
+}
 </script>
 </body>
 </html>
